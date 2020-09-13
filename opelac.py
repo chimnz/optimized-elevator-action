@@ -2,8 +2,10 @@ from numpy import loadtxt, mean, array
 from sys import argv
 
 CALLS_FILE = argv[1]  									# path to input file => {time} {floor} {dest} on each line
+OUT_FILE = argv[2]										# path to output file
 GOTO_TEMP = "TIME {:.2f}\tGOTO FLOOR {}"				# GOTO action template string
 STAT_TEMP = "AVERAGE {} TIME: {}"
+OUT_TEMP = "[START FLOOR {}]\n{}\n[END FLOOR {}]"
 INITIAL_POS = 1											# elevator starts on floor 1
 MOVE_SPEED = 1											# 1 floor/second
 
@@ -42,10 +44,11 @@ for time, pos, dest in calls:
 	goto( dest, pickup=False )										# goto, then drop off at dest
 
 # write elevator action time series to stdout
-print( "[START FLOOR {}]".format(INITIAL_POS) )
-for act in actions:
-	print(act)
-print( "[END FLOOR {}]".format(elevator['pos']) )
+s = OUT_TEMP.format(
+	INITIAL_POS, "\n".join(act for act in actions), elevator['pos']
+)
+with open(OUT_FILE, 'w') as f:
+	f.write(s)
 
 # compute stats
 wait_time, inside_time = array(wait_time), array(inside_time)
