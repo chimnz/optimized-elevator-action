@@ -1,3 +1,4 @@
+#!/usr/bin/python3 -B
 from numpy import loadtxt, mean, array
 from sys import argv
 
