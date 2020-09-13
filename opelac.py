@@ -40,6 +40,8 @@ def goto(floor, pickup=True):
 
 # sequentially perform pick ups and drop offs
 for time, pos, dest in calls:
+	if elapsed_time < time:											# if the call has not occured yet
+		elapsed_time = time											# wait for call to occur
 	goto( pos )														# goto, then pick up at pos
 	goto( dest, pickup=False )										# goto, then drop off at dest
 
