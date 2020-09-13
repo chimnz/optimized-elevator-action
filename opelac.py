@@ -3,12 +3,13 @@ from sys import argv
 
 CALLS_FILE = argv[1]  									# path to input file => {time} {floor} {dest} on each line
 OUT_FILE = argv[2]										# path to output file
-GOTO_TEMP = "TIME {:.2f}\tGOTO FLOOR {}"				# GOTO action template string
-STAT_TEMP = "AVERAGE {} TIME: {}"
+ACTION_TEMP = "TIME {:.2f}\tGOTO FLOOR {}"				# action (goto) msg template string
+STAT_TEMP = "AVERAGE {} TIME: {:.2f}"
 OUT_TEMP = "[START FLOOR {}]\n{}\n[END FLOOR {}]"
 INITIAL_POS = 1											# elevator starts on floor 1
 MOVE_SPEED = 1											# 1 floor/second
 
+# load CALLS_FILE data into calls list sorted by time
 dtype = [('time', 'f'), ('floor', 'i'), ('dest', 'i')]  # "f" is for float, "i" is for integer
 calls = loadtxt(fname=CALLS_FILE, dtype=dtype)  		# [(time1, floor1, dest1), (time2, floor2, dest2), ...]
 calls = sorted(calls, key=lambda x: x[0])  				# sort calls by time
@@ -23,20 +24,19 @@ elevator = {
 
 def goto(floor, pickup=True):
 	global elapsed_time, wait_time, inside_time
+	actions.append( ACTION_TEMP.format(elapsed_time, floor) )		# log the action to be performed
 	current_pos = elevator['pos']
-	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# time needed to move from current_pos to floor
 
-	if pickup:														# log time_delta in appropriate time_delta_list (wait_time/inside_time)
-		wait_time.append( time_delta )
-	else:  															# if not pickup, must be dropoff
-		inside_time.append( time_delta )
-	
-	actions.append( GOTO_TEMP.format(elapsed_time, floor) )			# log the action to be performed
-	elapsed_time += time_delta										# "wait until elevator arrives at floor"
+	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# time needed to move from current_pos to floor
+	if pickup:
+		wait_time.append( time_delta )								# record time rider spent waiting to be picked up
+	else:
+		inside_time.append( time_delta )							# record time rider spent inside the elevator
+	elapsed_time += time_delta										# (1) wait until elevator arrives at floor
 	elevator['pos'] = floor											# update elevator position
 
 	time_delta = 30 if floor == 1 else 5							# time needed to pick up or drop off riders
-	elapsed_time += time_delta
+	elapsed_time += time_delta										# (2) wait until finished picking up or dropping off
 
 # sequentially perform pick ups and drop offs
 for time, pos, dest in calls:
