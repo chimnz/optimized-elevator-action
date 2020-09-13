@@ -3,7 +3,7 @@ from sys import argv
 
 CALLS_FILE = argv[1]  									# path to input file => {time} {floor} {dest} on each line
 OUT_FILE = argv[2]										# path to output file
-ACTION_TEMP = "TIME {:.2f}\tGOTO FLOOR {}"				# action (goto) msg template string
+ACTION_TEMP = "TIME {:.2f}\t{} FLOOR {}"				# action (goto) msg template string
 STAT_TEMP = "AVERAGE {} TIME: {:.2f}"
 OUT_TEMP = "[START FLOOR {}]\n{}\n[END FLOOR {}]"
 INITIAL_POS = 1											# elevator starts on floor 1
@@ -23,8 +23,9 @@ elevator = {
 }
 
 def goto(floor, pickup=True):
-	global elapsed_time, wait_time, inside_time
-	actions.append( ACTION_TEMP.format(elapsed_time, floor) )		# log the action to be performed
+	global elapsed_time
+	action_type = "PICKUP" if pickup else "DROPOFF"
+	actions.append( ACTION_TEMP.format(elapsed_time, action_type, floor) )		# log the action to be performed
 	current_pos = elevator['pos']
 
 	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# time needed to move from current_pos to floor
