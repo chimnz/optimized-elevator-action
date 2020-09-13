@@ -12,7 +12,7 @@ MOVE_SPEED = 1											# 1 floor/second
 
 # load CALLS_FILE data into calls list sorted by time
 dtype = [('time', 'f'), ('floor', 'i'), ('dest', 'i')]  # "f" is for float, "i" is for integer
-calls = loadtxt(fname=CALLS_FILE, dtype=dtype)  		# [(time1, floor1, dest1), (time2, floor2, dest2), ...]
+calls = loadtxt(fname=CALLS_FILE, dtype=dtype)  		# load CALLS_FILE, ignores header
 calls = sorted(calls, key=lambda x: x[0])  				# sort calls by time
 
 actions = []				# list to log elevator actions
@@ -23,7 +23,7 @@ elevator = {
 	'pos': INITIAL_POS
 }
 
-def goto(floor, pickup=True):
+def goto(floor, pickup=False, dropoff=False):
 	global elapsed_time
 	action_type = "PICKUP" if pickup else "DROPOFF"
 	actions.append( ACTION_TEMP.format(elapsed_time, action_type, floor) )		# log the action to be performed
@@ -32,20 +32,21 @@ def goto(floor, pickup=True):
 	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# time needed to move from current_pos to floor
 	if pickup:
 		wait_time.append( time_delta )								# record time rider spent waiting to be picked up
-	else:
+	elif dropoff:
 		inside_time.append( time_delta )							# record time rider spent inside the elevator
 	elapsed_time += time_delta										# (1) wait until elevator arrives at floor
 	elevator['pos'] = floor											# update elevator position
 
-	time_delta = 30 if floor == 1 else 5							# time needed to pick up or drop off riders
-	elapsed_time += time_delta										# (2) wait until finished picking up or dropping off
+	if pickup or dropoff:
+		time_delta = 30 if floor == 1 else 5						# time needed to pick up or drop off riders
+		elapsed_time += time_delta									# (2) wait until finished picking up or dropping off
 
 # sequentially perform pick ups and drop offs
 for time, pos, dest in calls:
 	if elapsed_time < time:											# if the call has not occured yet
 		elapsed_time = time											# wait for call to occur
-	goto( pos )														# goto, then pick up at pos
-	goto( dest, pickup=False )										# goto, then drop off at dest
+	goto( pos, pickup=True )										# goto, then pick up at pos
+	goto( dest, dropoff=True )										# goto, then drop off at dest
 
 # write elevator action time series to stdout
 s = OUT_TEMP.format(
