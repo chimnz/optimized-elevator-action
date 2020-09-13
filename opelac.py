@@ -3,6 +3,7 @@ from sys import argv
 
 CALLS_FILE = argv[1]  									# path to input file => {time} {floor} {dest} on each line
 GOTO_TEMP = "TIME {:.2f}\tGOTO FLOOR {}"				# GOTO action template string
+STAT_TEMP = "AVERAGE {} TIME: {}"
 INITIAL_POS = 1											# elevator starts on floor 1
 MOVE_SPEED = 1											# 1 floor/second
 
@@ -45,3 +46,11 @@ print( "[START FLOOR {}]".format(INITIAL_POS) )
 for act in actions:
 	print(act)
 print( "[END FLOOR {}]".format(elevator['pos']) )
+
+# compute stats
+wait_time, inside_time = array(wait_time), array(inside_time)
+total_time = wait_time + inside_time
+data = [ ('WAIT', wait_time), ('INSIDE', inside_time), ('TOTAL', total_time) ]
+for time_type, time_delta_array in data:
+	mean_value = mean(time_delta_array)
+	print( STAT_TEMP.format(time_type, mean_value) )
