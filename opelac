@@ -2,7 +2,7 @@
 from numpy import loadtxt, mean, array
 from sys import argv
 
-CALLS_FILE = argv[1]  									# path to input file => {time} {floor} {dest} on each line
+CALLS_FILE = argv[1]  									# path to input file => {time} {pos} {dest} on each line
 OUT_FILE = argv[2]										# path to output file
 ACTION_TEMP = "TIME {:.2f}\t{} FLOOR {}"				# action (goto) msg template string
 STAT_TEMP = "AVERAGE {} TIME: {:.2f}"
@@ -11,51 +11,62 @@ INITIAL_POS = 1											# elevator starts on floor 1
 MOVE_SPEED = 1											# 1 floor/second
 
 # load CALLS_FILE data into calls list sorted by time
-dtype = [('time', 'f'), ('floor', 'i'), ('dest', 'i')]  # "f" is for float, "i" is for integer
-calls = loadtxt(fname=CALLS_FILE, dtype=dtype)  		# load CALLS_FILE, ignores header
-calls = sorted(calls, key=lambda x: x[0])  				# sort calls by time
+calls = sorted(loadtxt(
+	fname=CALLS_FILE,
+	dtype = [('time', 'f'), ('floor', 'i'), ('dest', 'i')]  # "f" is for float, "i" is for integer
+), key=lambda x: x[0])
 
+commands = []				# calls => commands (FIFO queue of PICKUP AND DROPOFF)
 actions = []				# list to log elevator actions
-wait_time = []				# array of pickup time_delta values
-inside_time = []			# array of dropoff time_delta values
+wait_time = []				# log of time rider spent waiting to be picked up during each call
+inside_time = []			# log of time rider spent inside elevator during each call
 elapsed_time = calls[0][0]	# the time of the very first call
-elevator = {
-	'pos': INITIAL_POS
-}
+elevator = { 'pos': INITIAL_POS }
+
+# iterate through times series and convert calls into command times series
+for time, pos, dest in calls:
+	commands.append( {'time': time, 'floor': pos, 'pickup': True, 'dropoff': False} )
+	commands.append( {'time': time, 'floor': dest, 'pickup': False, 'dropoff': True} )
 
 def goto(floor, pickup=False, dropoff=False):
 	global elapsed_time
-	action_type = "PICKUP" if pickup else "DROPOFF"
-	actions.append( ACTION_TEMP.format(elapsed_time, action_type, floor) )		# log the action to be performed
-	current_pos = elevator['pos']
-
-	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# time needed to move from current_pos to floor
+	assert pickup != dropoff										# must be one or the other, cannot pick-up and drop-off same rider at once
 	if pickup:
-		wait_time.append( time_delta )								# record time rider spent waiting to be picked up
-	elif dropoff:
-		inside_time.append( time_delta )							# record time rider spent inside the elevator
-	elapsed_time += time_delta										# (1) wait until elevator arrives at floor
+		action_word, time_delta_array = 'PICKUP', wait_time
+	else:
+		action_word, time_delta_array = 'DROPOFF', inside_time
+
+	# log action that is to be performed at the current (elapsed) time
+	actions.append( ACTION_TEMP.format(elapsed_time, action_word, floor) )
+
+	# simulate moving from current position to specified floor
+	current_pos = elevator['pos']
+	time_delta = abs(floor - current_pos) / MOVE_SPEED  			# (1) time needed to move from current_pos to floor
+	elapsed_time += time_delta										# wait until elevator arrives at floor
+	time_delta_array.append( time_delta )							# log time delta
 	elevator['pos'] = floor											# update elevator position
 
-	if pickup or dropoff:
-		time_delta = 30 if floor == 1 else 5						# time needed to pick up or drop off riders
-		elapsed_time += time_delta									# (2) wait until finished picking up or dropping off
+	# simulate waiting for rider to get on/off
+	time_delta = 30 if floor == 1 else 5							# (2) time needed to pick up or drop off riders
+	elapsed_time += time_delta										# wait until finished picking up or dropping off
 
-# sequentially perform pick ups and drop offs
-for time, pos, dest in calls:
-	if elapsed_time < time:											# if the call has not occured yet
-		elapsed_time = time											# wait for call to occur
-	goto( pos, pickup=True )										# goto, then pick up at pos
-	goto( dest, dropoff=True )										# goto, then drop off at dest
+# process command queue (simulation)
+while len(commands) > 0:
+	cmd = commands.pop(0)
+	hail_time = cmd.pop('time')										# time at which elevator was hailed
+	if elapsed_time < hail_time:									# if the call has not occured yet
+		elapsed_time = hail_time									# wait for call to occur
+	goto(**cmd)
 
-# write elevator action time series to stdout
-s = OUT_TEMP.format(
-	INITIAL_POS, "\n".join(act for act in actions), elevator['pos']
-)
+# write action time series to output file
 with open(OUT_FILE, 'w') as f:
-	f.write(s)
+	f.write(OUT_TEMP.format(
+		INITIAL_POS,
+		"\n".join(act for act in actions),
+		elevator['pos']
+))
 
-# compute stats
+# compute stats and write to stdout
 wait_time, inside_time = array(wait_time), array(inside_time)
 total_time = wait_time + inside_time
 data = [ ('WAIT', wait_time), ('INSIDE', inside_time), ('TOTAL', total_time) ]
