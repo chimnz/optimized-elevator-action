@@ -1,1 +1,43 @@
 #!/usr/bin/python3 -B
+from numpy import loadtxt, mean, array
+from sys import argv
+
+CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
+OUT_FILE = argv[2]										# path to output file
+
+INITIAL_POS = 1											# initial shaft position
+SPEED = 1												# shaft speed
+TIME = 0                                                # simulation time
+INC = 1													# simulation time increment
+
+EXEC_MSG = "TIME {}\tFLOOR {} -> {}\t{}"
+
+pickup, dropoff = 'PICKUP', 'DROPOFF'                       # action strings
+dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
+shaft = { 'pos': 1 }                                        # init shaft state (starts at first floor)
+
+# load data into 2D array
+calls = list( loadtxt(fname=CALLS_FILE, dtype=('i')) )
+# set simulation start time to time of first call
+TIME = calls[0][0]
+# convert 2D array into 1D array of hash tables
+calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
+
+def exec(act, pos, dest):
+    global TIME
+    print( EXEC_MSG.format(TIME, pos, dest, act) )          # print execution message to stdout
+
+    dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
+    dt1_log[act].append(dt1)
+    dt2 = 30 if dest == 1 else 5                            # delay #2: loading/unloading
+    TIME += (dt1 + dt2)
+    shaft['pos'] = dest                                     # shaft has reached destination
+
+# simulation
+while calls:
+    next_call_time = calls[0]['t']
+    if TIME >= next_call_time:
+        call = calls.pop(0)
+        exec( pickup, shaft['pos'], call['pos'] )      # pickup first
+        exec( dropoff, call['pos'], call['dest'] )     # then dropoff
+    TIME += INC
