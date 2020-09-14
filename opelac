@@ -2,12 +2,14 @@
 from numpy import loadtxt, mean, array
 from sys import argv
 
-CALLS_FILE = argv[1]  									# path to input file => {time} {pos} {dest} on each line
+CALLS_FILE = argv[1]  									# path to input file => {call_time} {call_floor} {end_floor} on each line
 OUT_FILE = argv[2]										# path to output file
-ACTION_TEMP = "TIME {:.2f}\t{} FLOOR {}"				# action (goto) msg template string
-STAT_TEMP = "AVERAGE {} TIME: {:.2f}"
 INITIAL_POS = 1											# all shafts start on floor 1
 MOVE_SPEED = 1											# 1 floor/second
+N_SHAFTS = 3
+
+ACTION_TEMP = "TIME {:.2f}\t{} FLOOR {}"
+STAT_TEMP = "AVERAGE {} TIME: {:.2f}"
 
 # load CALLS_FILE data into calls list sorted by time
 calls = sorted(loadtxt(
@@ -15,56 +17,60 @@ calls = sorted(loadtxt(
     dtype = [('time', 'f'), ('floor', 'i'), ('dest', 'i')]  # "f" is for float, "i" is for integer
 ), key=lambda x: x[0])
 
+time = calls[0][0]	                                    # the time of the very first call
+pickup, dropoff = 'PICKUP', 'DROPOFF'                   # action strings
 commands = []				                            # calls => commands (FIFO queue of PICKUP AND DROPOFF)
-actions = []				                            # list to log elevator actions
-wait_time = []				                            # log of time rider spent waiting to be picked up during each call
-inside_time = []			                            # log of time rider spent inside elevator during each call
-elapsed_time = calls[0][0]	                            # the time of the very first call
-elevator = { 'floor': INITIAL_POS }
+action_log = []				                            # log of elevator actions
+elevator = { shaft: {'pos': INITIAL_POS} for shaft in range(N_SHAFTS) }
+dt1_log = {
+    pickup: [],                                         # log of time rider spent waiting to be picked up during each call
+    dropoff: []                                         # log of time rider spent inside shaft during each call
+}
 
 # convert call time series into command times series
-for time, pos, dest in calls:
-    commands.append( {'time': time, 'floor': pos, 'action': 'PICKUP'} )
-    commands.append( {'time': time, 'floor': dest, 'action': 'DROPOFF'} )
+for call_time, call_floor, end_floor in calls:
+    commands.append( {'t': call_time, 'dest': call_floor, 'act': pickup} )
+    commands.append( {'t': call_time, 'dest': end_floor, 'act': dropoff} )
 
-def goto(floor, action):
-    global elapsed_time
-    tdl = None                                          # "time delta log": the log (list) in which to record wait time or inside time
-    if action is 'PICKUP':
-        tdl = wait_time
-    elif action is 'DROPOFF':
-        tdl = inside_time
+def choose_shaft():
+    return 0
+
+def goto(shaft, dest, act):
+    global time
+    pos = elevator[shaft]['pos']
+    tdl = dt1_log[act]                                              # "time delta log": the log (list) in which to record wait time or inside time
 
     # log action that is to be performed at the current (elapsed) time
-    actions.append( ACTION_TEMP.format(elapsed_time, action, floor) )
+    action_log.append( ACTION_TEMP.format(time, act, dest) )
 
-    # simulate moving from current floor to specified floor
-    dt1 = abs(floor - elevator['floor']) / MOVE_SPEED  			    # (1) time needed to move from current_pos to floor
-    elapsed_time += dt1										        # wait until elevator arrives at floor
+    # simulate moving from (current) position to destination floor
+    dt1 = abs(dest - pos) / MOVE_SPEED  			                # (1) time needed to move from pos to dest
+    time += dt1										                # wait until shaft arrives at floor
     tdl.append( dt1 )							                    # log time delta
-    elevator['floor'] = floor										# update elevator position
+    elevator[shaft]['pos'] = dest								    # update shaft position
 
     # simulate waiting for rider to get on/off
-    dt2 = 30 if floor == 1 else 5							        # (2) time needed to pick up or drop off riders
-    elapsed_time += dt2										        # wait until finished picking up or dropping off
+    dt2 = 30 if dest == 1 else 5							        # (2) time needed to pick up or drop off riders
+    time += dt2										                # wait until finished picking up or dropping off
 
 # process command queue (simulation)
 while len(commands) > 0:
     cmd = commands.pop(0)
-    hail_time = cmd.pop('time')										# time at which elevator was hailed
-    if elapsed_time < hail_time:									# if the call has not occured yet
-        elapsed_time = hail_time									# wait for call to occur
+    call_time = cmd.pop('t')								        # time at which elevator call was made
+    if time < call_time:									        # if the call has not occured yet
+        time = call_time									        # wait for call to occur
+    cmd['shaft'] = choose_shaft()                                   # choose optimal shaft
     goto(**cmd)
 
 # write action time series to output file
 with open(OUT_FILE, 'w') as f:
-    s = "\n".join(act for act in actions)
+    s = "\n".join(act for act in action_log)
     f.write(s)
 
 # compute stats and write to stdout
-wait_time, inside_time = array(wait_time), array(inside_time)
-total_time = wait_time + inside_time
-data = [ ('WAIT', wait_time), ('INSIDE', inside_time), ('TOTAL', total_time) ]
-for time_type, time_delta_array in data:
-    mean_value = mean(time_delta_array)
-    print( STAT_TEMP.format(time_type, mean_value) )
+dt1_wait, dt1_inside = array(dt1_log[pickup]), array(dt1_log[dropoff])
+dt1_total = dt1_wait + dt1_inside
+data = [ ('WAIT', dt1_wait), ('INSIDE', dt1_inside), ('TOTAL', dt1_total) ]
+for dt1_type, dt1 in data:
+    m = mean(dt1)
+    print( STAT_TEMP.format(dt1_type, m) )
