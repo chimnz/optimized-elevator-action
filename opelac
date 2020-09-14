@@ -11,8 +11,10 @@ TIME = 0                                                # simulation time
 INC = 1													# simulation time increment
 
 EXEC_MSG = "TIME {}\tFLOOR {} -> {}\t{}"
+STAT_MSG = "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_DELAY = {:.2f}"
 
 pickup, dropoff = 'PICKUP', 'DROPOFF'                       # action strings
+action_log = []
 dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
 shaft = { 'pos': 1 }                                        # init shaft state (starts at first floor)
 
@@ -25,7 +27,8 @@ calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
 
 def exec(act, pos, dest):
     global TIME
-    print( EXEC_MSG.format(TIME, pos, dest, act) )          # print execution message to stdout
+    msg = EXEC_MSG.format(TIME, pos, dest, act)             # log the action that is about to occur
+    action_log.append( msg )
 
     dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
     dt1_log[act].append(dt1)
@@ -41,3 +44,16 @@ while calls:
         exec( pickup, shaft['pos'], call['pos'] )      # pickup first
         exec( dropoff, call['pos'], call['dest'] )     # then dropoff
     TIME += INC
+
+# write action time series to output file
+with open(OUT_FILE, 'w') as f:
+    s = "\n".join(msg for msg in action_log)
+    f.write(s)
+
+# compute stats and write to stdout
+avg_wait_time = mean( array(dt1_log[pickup]) )
+avg_inside_time = mean( dt1_log[dropoff] )
+avg_total_delay = avg_wait_time + avg_inside_time
+print(STAT_MSG.format(
+    avg_wait_time, avg_inside_time, avg_total_delay
+))
