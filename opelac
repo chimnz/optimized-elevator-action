@@ -2,9 +2,12 @@
 from numpy import loadtxt, mean, array
 from sys import argv
 
-CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
-OUT_FILE = argv[2]										# path to output file
-NUM_SHAFTS = int(argv[3])
+try:
+    CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
+    OUT_FILE = argv[2]										# path to output file
+    NUM_SHAFTS = int(argv[3])                               # specify number of shafts
+except:
+    exit('usage : opelac [CALLS_FILE] [OUT_FILE] [NUM_SHAFTS]')
 
 INITIAL_POS = 1											# initial shaft position
 SPEED = 1												# shaft speed
