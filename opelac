@@ -4,12 +4,12 @@ from sys import argv
 
 try:
     CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
-    OUT_FILE = argv[2]										# path to output file
-    NUM_SHAFTS = int(argv[3])                               # specify number of shafts
+    NUM_SHAFTS = int(argv[2])                               # specify number of shafts
+    INITIAL_POS = int(argv[3])								# initial position of all shafts
+    OUT_FILE = argv[4]										# path to output file
 except:
-    exit('usage : opelac [CALLS_FILE] [OUT_FILE] [NUM_SHAFTS]')
+    exit('usage : opelac [CALLS_FILE] [NUM_SHAFTS] [INITIAL_POS] [OUT_FILE]')
 
-INITIAL_POS = 1											# initial shaft position
 SPEED = 1												# shaft speed
 TIME = 0
 
