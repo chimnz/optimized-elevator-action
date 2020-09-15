@@ -3,7 +3,7 @@ from numpy import loadtxt, mean, array
 from sys import argv
 
 try:
-    CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
+    CALLS_FILE = argv[1]  									# path to input file => {call_time} {call_pos} {call_dest} on each line
     NUM_SHAFTS = int(argv[2])                               # specify number of shafts
     INITIAL_POS = int(argv[3])								# initial position of all shafts
     OUT_FILE = argv[4]										# path to output file
@@ -36,8 +36,9 @@ def nearest_shaft(pos):
     shafts = sorted( es.values(), key=distance )
     return shafts[0]['n']
 
-def goto(act, n, pos, dest):
+def goto(act, n, dest):                                     # move shaft n from its current pos to dest
     global TIME
+    pos = es[n]['pos']
     msg = EXEC_MSG.format(TIME, n, pos, dest, act)          # log message for the action
     action_log.append( msg )
 
@@ -50,13 +51,12 @@ def goto(act, n, pos, dest):
 # process calls list a FIFO queue
 while calls:
     call = calls.pop(0)
-    call_time = call['t']
-    if TIME <= call_time:                                   # if next call has not occured yet
-        TIME = call_time                                    # wait until next call before performing actions
+    if TIME <= call['t']:                                   # if next call has not occured yet
+        TIME = call['t']                                    # wait until next call before performing actions
 
     n = nearest_shaft( call['pos'] )                        # choose the nearest shaft
-    goto( pickup, n, es[n]['pos'], call['pos'] )            # pickup first
-    goto( dropoff, n, call['pos'], call['dest'] )           # then dropoff
+    goto( pickup, n, call['pos'] )                          # pickup first
+    goto( dropoff, n, call['dest'] )                        # then dropoff
 
 # write action time series to output file
 with open(OUT_FILE, 'w') as f:
