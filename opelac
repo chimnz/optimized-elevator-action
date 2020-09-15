@@ -1,20 +1,24 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean, array
-from sys import argv
+import sys, yaml, io
 
 try:
-    CALLS_FILE = argv[1]  									# path to input file => {call_time} {call_pos} {call_dest} on each line
-    NUM_SHAFTS = int(argv[2])                               # specify number of shafts
-    INITIAL_POS = int(argv[3])								# initial position of all shafts
-    OUT_FILE = argv[4]										# path to output file
+    if not sys.stdin.isatty():                                   # if stdin is not interactive (proper piping or input redirection occured)
+        CALLS = io.StringIO('\n'.join(line for line in sys.stdin))
+    else:
+        raise Exception
+    CONFIG_FILE = sys.argv[1]
+    with open(CONFIG_FILE) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
+    INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
+    SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
+    ACTION_MSG = config['templates']['ACTION']
+    STAT_MSG = config['templates']['STATS']
 except:
-    exit('usage : opelac [CALLS_FILE] [NUM_SHAFTS] [INITIAL_POS] [OUT_FILE]')
+    exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
 
-SPEED = 1												# shaft speed
-TIME = 0
-
-EXEC_MSG = "TIME {};\tSHAFT {} FLOOR {} -> {}\t{}"
-STAT_MSG = "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_DELAY = {:.2f}"
+TIME = 0                                                    # simulation time
 
 pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
 action_log = []                                             # action message log
@@ -26,20 +30,20 @@ for i in range(NUM_SHAFTS):
     es[n] = shaft
 
 # load data into 2D array
-calls = list( loadtxt(fname=CALLS_FILE, dtype=('i')) )
-TIME = calls[0][0]
+calls = list( loadtxt(fname=CALLS, dtype=('i')) )
+TIME = calls[0][0]                                          # set the time initial elapsed simulation time to time of first call
 # convert 2D array into 1D array of hash tables
 calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
 
 def nearest_shaft(pos):
     distance = lambda shaft: abs( pos - shaft['pos'] )
-    shafts = sorted( es.values(), key=distance )
+    shafts = sorted( es.values(), key=distance )            # all shafts sorted by distance releative to pos
     return shafts[0]['n']
 
 def goto(act, n, dest):                                     # move shaft n from its current pos to dest
     global TIME
     pos = es[n]['pos']
-    msg = EXEC_MSG.format(TIME, n, pos, dest, act)          # log message for the action
+    msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log message for the action
     action_log.append( msg )
 
     dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
@@ -53,20 +57,15 @@ while calls:
     call = calls.pop(0)
     if TIME <= call['t']:                                   # if next call has not occured yet
         TIME = call['t']                                    # wait until next call before performing actions
-
     n = nearest_shaft( call['pos'] )                        # choose the nearest shaft
-    goto( pickup, n, call['pos'] )                          # pickup first
+    goto( pickup, n, call['pos'] )                          # perform pickup
     goto( dropoff, n, call['dest'] )                        # then dropoff
-
-# write action time series to output file
-with open(OUT_FILE, 'w') as f:
-    s = "\n".join(msg for msg in action_log)
-    f.write(s)
 
 # compute stats and write to stdout
 avg_wait_time = mean( array(dt1_log[pickup]) )
 avg_inside_time = mean( dt1_log[dropoff] )
 avg_total_delay = avg_wait_time + avg_inside_time
-print(STAT_MSG.format(
-    avg_wait_time, avg_inside_time, avg_total_delay
-))
+print(STAT_MSG.format(avg_wait_time, avg_inside_time, avg_total_delay))
+# write action time series to stdout
+actions = "\n".join(msg for msg in action_log)
+print(actions)
