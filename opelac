@@ -4,46 +4,56 @@ from sys import argv
 
 CALLS_FILE = argv[1]  									# path to input file => {t} {pos} {dest} on each line
 OUT_FILE = argv[2]										# path to output file
+NUM_SHAFTS = int(argv[3])
 
 INITIAL_POS = 1											# initial shaft position
 SPEED = 1												# shaft speed
-TIME = 0                                                # simulation time
-INC = 1													# simulation time increment
+TIME = 0
 
-EXEC_MSG = "TIME {}\tFLOOR {} -> {}\t{}"
+EXEC_MSG = "TIME {};\tSHAFT {} FLOOR {} -> {}\t{}"
 STAT_MSG = "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_DELAY = {:.2f}"
 
-pickup, dropoff = 'PICKUP', 'DROPOFF'                       # action strings
-action_log = []
+pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
+action_log = []                                             # action message log
 dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
-shaft = { 'pos': 1 }                                        # init shaft state (starts at first floor)
+es = {}                                                     # init elevator system state
+for i in range(NUM_SHAFTS):
+    n = i+1                                                 # shaft number
+    shaft = { 'n': n, 'pos': INITIAL_POS }                  # shaft (dict)
+    es[n] = shaft
 
 # load data into 2D array
 calls = list( loadtxt(fname=CALLS_FILE, dtype=('i')) )
-# set simulation start time to time of first call
 TIME = calls[0][0]
 # convert 2D array into 1D array of hash tables
 calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
 
-def exec(act, pos, dest):
+def nearest_shaft(pos):
+    distance = lambda shaft: abs( pos - shaft['pos'] )
+    shafts = sorted( es.values(), key=distance )
+    return shafts[0]['n']
+
+def goto(act, n, pos, dest):
     global TIME
-    msg = EXEC_MSG.format(TIME, pos, dest, act)             # log the action that is about to occur
+    msg = EXEC_MSG.format(TIME, n, pos, dest, act)          # log message for the action
     action_log.append( msg )
 
     dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
     dt1_log[act].append(dt1)
     dt2 = 30 if dest == 1 else 5                            # delay #2: loading/unloading
     TIME += (dt1 + dt2)
-    shaft['pos'] = dest                                     # shaft has reached destination
+    es[n]['pos'] = dest                                     # shaft has reached destination
 
-# simulation
+# process calls list a FIFO queue
 while calls:
-    next_call_time = calls[0]['t']
-    if TIME >= next_call_time:
-        call = calls.pop(0)
-        exec( pickup, shaft['pos'], call['pos'] )      # pickup first
-        exec( dropoff, call['pos'], call['dest'] )     # then dropoff
-    TIME += INC
+    call = calls.pop(0)
+    call_time = call['t']
+    if TIME <= call_time:                                   # if next call has not occured yet
+        TIME = call_time                                    # wait until next call before performing actions
+
+    n = nearest_shaft( call['pos'] )                        # choose the nearest shaft
+    goto( pickup, n, es[n]['pos'], call['pos'] )            # pickup first
+    goto( dropoff, n, call['pos'], call['dest'] )           # then dropoff
 
 # write action time series to output file
 with open(OUT_FILE, 'w') as f:
