@@ -1,6 +1,7 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean, array
-import sys, yaml, io
+import sys, yaml, io, random
+from string import ascii_lowercase as chars
 
 try:
     if not sys.stdin.isatty():                                   # if stdin is not interactive (proper piping or input redirection occured)
@@ -18,54 +19,41 @@ try:
 except:
     exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
 
-TIME = 0                                                    # simulation time
+elv = {
+    'y': 1,                                                 # initial pos
+    'rdrs': {}                                              # hash map => {rider: True}
+}
+data = loadtxt(fname=CALLS, dtype=('i'))                    # load data into 2D array: [(t, a, b), ...]
+calls = {}                                                  # hash map => {t: {pos dest rider}}
+for t, a, b in data:
+    calls[t] = (a, b)
 
-pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
-action_log = []                                             # action message log
-dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
-es = {}                                                     # init elevator system state
-for i in range(NUM_SHAFTS):
-    n = i+1                                                 # shaft number
-    shaft = { 'n': n, 'pos': INITIAL_POS }                  # shaft (dict)
-    es[n] = shaft
+rider = lambda: ''.join(random.choice(chars) for i in range(7))
+distance = lambda pos: abs( pos - elv['y'] )
 
-# load data into 2D array
-calls = list( loadtxt(fname=CALLS, dtype=('i')) )
-TIME = calls[0][0]                                          # set the time initial elapsed simulation time to time of first call
-# convert 2D array into 1D array of hash tables
-calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
+'''
+drops = {}                                              # hash map => {t: {rider}}, (rider will have reached destination and gotten off)
+if drops.get(t):                                        # if there are riders to be dropped off at current_floor
+    dsmbrk = drop.pop(t)                                # riders who will be getting off on floor y
+    for rdr in dsmbrk:
+        elv['rdrs'].pop(rdr)                            # powerful: remove rider by unique identifier rather than count
+        print('drop {} on {}'.format(rdr, y))
+    delay += dt                                         # "wait for drop-off to finish"
+'''
 
-def nearest_shaft(pos):
-    distance = lambda shaft: abs( pos - shaft['pos'] )
-    shafts = sorted( es.values(), key=distance )            # all shafts sorted by distance releative to pos
-    return shafts[0]['n']
-
-def goto(act, n, dest):                                     # move shaft n from its current pos to dest
-    global TIME
-    pos = es[n]['pos']
-    msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log message for the action
-    action_log.append( msg )
-
-    dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
-    dt1_log[act].append(dt1)
-    dt2 = 30 if dest == 1 else 5                            # delay #2: loading/unloading
-    TIME += (dt1 + dt2)
-    es[n]['pos'] = dest                                     # shaft has reached destination
-
-# process calls list a FIFO queue
+t = delay = 0
 while calls:
-    call = calls.pop(0)
-    if TIME <= call['t']:                                   # if next call has not occured yet
-        TIME = call['t']                                    # wait until next call before performing actions
-    n = nearest_shaft( call['pos'] )                        # choose the nearest shaft
-    goto( pickup, n, call['pos'] )                          # perform pickup
-    goto( dropoff, n, call['dest'] )                        # then dropoff
-
-# compute stats and write to stdout
-avg_wait_time = mean( array(dt1_log[pickup]) )
-avg_inside_time = mean( dt1_log[dropoff] )
-avg_total_delay = avg_wait_time + avg_inside_time
-print(STAT_MSG.format(avg_wait_time, avg_inside_time, avg_total_delay))
-# write action time series to stdout
-actions = "\n".join(msg for msg in action_log)
-print(actions)
+    if calls.get(t):                                        # a call was made at the current time
+        a, b = calls.pop(t)                                 # pick-up and drop-off floors
+        dy = 1 if a >= elv['y'] else -1                     # moving elevator: choose increment
+        while elv['y'] != a:                                # moving elevator: pos -> a (pick-up floor)
+            elv['y'] += dy                                  # moving elevator: move up/down one floor
+            y = elv['y']
+            dt = 30 if y == 1 else 5                        # delay caused by pickup/dropoff
+            delay += 1                                      # move 1 floor/second
+        rdr = rider()                                       # represent unique rider as randomly generated 7 char rider id
+        print('picked up rider: {} from {}'.format(rdr, a)) # [debug]
+        elv['rdrs'].update( {rdr:True} )                    # pick the the rider
+        delay += 1                                          # "wait for pick-up to finish"
+        pass                                                # add to hash of riders to be dropped off
+    t += 1
