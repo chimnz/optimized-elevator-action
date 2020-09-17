@@ -2,6 +2,7 @@
 from numpy import loadtxt, mean, array
 import sys, io, random, string
 
+'''
 try:
     if not sys.stdin.isatty():                              # if stdin is not interactive (proper piping or input redirection occured)
         CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
@@ -9,29 +10,31 @@ try:
         raise Exception
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
-
+'''
+CALLS = 'data.txt'
 data = loadtxt(fname=CALLS, dtype=('i'))                    # load data into 2D array: [(t, a, b), ...]
 calls = {t: (a,b) for t,a,b in data}                        # hash map => {t: (a, b)}
 
-N = 2                                                       # number of elevators
+NUM_SHAFTS = 2                                                       # number of elevators
 CAPACITY = 2                                                # maximum capacity of each elevator
 elv = {
-    'y': 1,
+    'y': 1,                                                 # the position of the elevator
     'riders': {},                                           # hash map => {rider: True}
-    ##'delay': 0,                                              # the amount of time by which elevator movement is delayed
-    'dy': 1
+    'delay': 0,                                             # the amount of time by which elevator movement should be delayed
+    'velocity': 1                                           # the velocity (speed and direction) of the elevator
 }
-elv = {i: elv.copy() for i in range(N)}                     # N identical elevators
+elv = {i: elv.copy() for i in range(NUM_SHAFTS)}            # (NUM_SHAFTS) identical elevators
 
-pickup = {}                                                 # {a: [rider, ...]}
-dest = {}                                                   # {rider: b}
-dropoff = {}                                                # {b: [rider, ...]}
+waiting = {}                                                # {a: [rider, ...]}
+destination = {}                                            # {rider: b}
+arriving = {}                                               # {b: [rider, ...]}
 
-position = lambda idx: elv[idx]['y']
-nriders = lambda idx: len(elv[idx]['riders'])               # get number of riders in elevator (idx)
-limit = lambda idx: CAPACITY - nriders(idx)                 # get number of additional people that can fit onto elevator
-npickup = lambda y: len(pickup[y])                          # get number of people to be picked up at y
-##delayed = lambda idx: elv[idx]['delay']              
+position = lambda idx: elv[idx]['y']                        # get: position of elevator
+nriders = lambda idx: len(elv[idx]['riders'])               # get: number of riders inside elevator
+limit = lambda idx: CAPACITY - nriders(idx)                 # get: number of additional riders that can fit inside elevator
+npickup = lambda y: len(waiting[y])                         # get: number of people to be riders up at y
+velocity = lambda idx: elv[idx]['velocity']                 # get: velocity of elevator
+delayed = lambda idx: elv[idx]['delay']
 
 log = {'C': 0, 'P': 0, 'D': 0}                              # store number of calls, pick-ups, and drop-offs
 
@@ -41,15 +44,13 @@ delay = 0
 def advance():                                              # move elevators, advance time forward
     global t
     dt = 1
-    for idx in range(N):
-        dy = elv[idx]['dy']
+    for idx in range(NUM_SHAFTS):
         if position(idx) == 1:
-            dy = 1                                          # move 1 floor/second
+            elv[idx]['velocity'] = int( 1 / dt )            # set velocity: 1 floor/second
         elif position(idx) == 100:
-            dy = -1                                         # move at -1 floor/second
-        elv[idx]['dy'] = dy
-        elv[idx]['y'] += dy
-    t += dt                                                 # time moves forward no matter what
+            elv[idx]['velocity'] = int( -1 / dt )           # set velocity: -1 floor/second
+        elv[idx]['y'] += velocity(idx)
+    t += dt                                                 # time moves forward by one second no matter what
 
 def rider():                                                # generate unique rider identifier
     chars = string.ascii_lowercase + string.digits
@@ -60,45 +61,43 @@ def respond(call):
     log['C'] += 1
     r = rider()                                             # unique rider for each call (r)
     a, b = call                                             
-    pickup[a] = pickup.get(a, []) + [r]                     # at (a), pick up (r)
-    dest[r] = b                                             # (r) is going to (b)
+    waiting[a] = waiting.get(a, []) + [r]                   # (r) is waiting at (a)
+    destination[r] = b                                      # (r) is going to (b)
 
-def pick(idx, riders):
+def pickup(idx, riders):
     global delay
     for r in riders:
         log['P'] += 1
-        elv[idx]['riders'][r] = True                        # new rider steps into elevator
-        b = dest[r]                                         # rider is going to (b)
-        dropoff[b] = dropoff.get(b, []) + [r]               # at (b), dropoff (r)
-    dt = 30 if position(idx) == 1 else 5                    # compensate for time it takes to pick up riders
-    delay += dt;
-    ##elv[idx]['delay'] += dt
+        elv[idx]['riders'][r] = True                            # rider steps into elevator
+        b = destination[r]                                      # rider is going to (b)
+        arriving[b] = arriving.get(b, []) + [r]                 # at (b), dropoff (r)
+    dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to pick up riders
+    delay += dt; elv[idx]['delay'] += dt
 
-def drop(idx, riders):
+def dropoff(idx, riders):
     global delay
     for r in riders:
         log['D'] += 1
         elv[idx]['riders'].pop(r)                               # disembark riders by their unique identifer
     dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to drop off riders
-    delay += dt;
-    ##elv[idx]['delay'] += dt
+    delay += dt; elv[idx]['delay'] += dt
 
-while calls or pickup or dropoff:
+while calls or waiting or arriving:
     if calls.get(t):                                            # check if call was made at current time)
         respond( calls.pop(t) )
-    for idx in range(N):
+    for idx in range(NUM_SHAFTS):
         y = position(idx)
-        if dropoff.get(y):                                      # (1) check if rider(s) needs to be dropped off at current position  
-            drop( idx, dropoff.pop(y) )
-        if pickup.get(y):                                       # (2) check if rider(s) needs to be picked up at current position
+        if arriving.get(y):                                     # (1) check if rider(s) needs to be dropped off at current position  
+            dropoff( idx, arriving.pop(y) )
+        if waiting.get(y):                                      # (2) check if rider(s) needs to be picked up at current position
             lmt = limit(idx)
             if npickup(y) <= lmt:                               # if there is enough space
-                pick( idx, pickup.pop(y) )                      # pick-up all riders
+                pickup( idx, waiting.pop(y) )                   # pick-up all riders
             else:                                               # if there is not enough space
-                pick( idx, pickup[y][:lmt] )                    # pick up only (lmt) people
-                pickup[y] = pickup[y][lmt:]                     # update pickup table
+                pickup( idx, waiting[y][:lmt] )                 # pick up only (lmt) people
+                waiting[y] = waiting[y][lmt:]                   # update pickup table
     advance()
 
-assert all(nriders(idx) == 0 for idx in range(N))
-assert log['C'] == log['P'] == log['D']
+assert all(nriders(idx) == 0 for idx in range(NUM_SHAFTS))
+assert len(data) == log['C'] == log['P'] == log['D']
 print('t:', t, 'delay:', delay)
