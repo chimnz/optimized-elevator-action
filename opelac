@@ -47,22 +47,28 @@ def respond(call):
     log['C'] += 1
     r = rider()                                             # unique rider for each call (r)
     a, b = call                                             
-    pickup[a] = pickup.get(a, []) + [r]                     # at (a), pickup (r)
+    pickup[a] = pickup.get(a, []) + [r]                     # at (a), pick up (r)
     dest[r] = b                                             # (r) is going to (b)
 
 def pick(riders):
+    global delay
     for r in riders:
         log['P'] += 1
         elv['riders'][r] = True                             # new rider steps into elevator
         b = dest[r]                                         # rider is going to (b)
         dropoff[b] = dropoff.get(b, []) + [r]               # at (b), dropoff (r)
+    dt = 30 if elv['y'] == 1 else 5                         # compensate for time it takes to pick up riders
+    delay += dt
+
 
 def drop(riders):
+    global delay
     for r in riders:
         log['D'] += 1
-        elv['riders'].pop(r)                                # disembark riders by unique identifer
+        elv['riders'].pop(r)                                # disembark riders by their unique identifer
+    dt = 30 if elv['y'] == 1 else 5                         # compensate for time it takes to drop off riders
+    delay += dt
 
-#NOTE: must compensate for pick-up and drop-off time!
 while calls or pickup or dropoff:
     y = elv['y']
     if calls.get(t):                                        # check if call was made at current time
@@ -76,7 +82,6 @@ while calls or pickup or dropoff:
         if npickup <= limit:                                # if there is enough space, pick-up all riders
             pick( pickup.pop(y) )
         else:                                               # if there is not enough space choose riders who will be picked up        
-            #NOTE: should choose new riders in order of earliest call (inside wait time)
             newriders = pickup[y][:limit]                   # riders that will be emabrking
             pickup[y] = pickup[y][limit:]                   # update pickup table
             pick( newriders )
