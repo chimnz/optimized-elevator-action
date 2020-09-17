@@ -3,10 +3,8 @@ from numpy import loadtxt, mean, array
 import sys, yaml, io
 
 try:
-    if not sys.stdin.isatty():                                   # if stdin is not interactive (proper piping or input redirection occured)
-        CALLS = io.StringIO('\n'.join(line for line in sys.stdin))
-    else:
-        raise Exception
+    if '-h' in sys.argv:
+        raise
     CONFIG_FILE = sys.argv[1]
     with open(CONFIG_FILE) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -15,6 +13,7 @@ try:
     SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
     ACTION_MSG = config['templates']['ACTION']
     STAT_MSG = config['templates']['STATS']
+    CALLS = io.StringIO('\n'.join(line for line in sys.stdin))
 except:
     exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
 
@@ -52,7 +51,7 @@ def goto(act, n, dest):                                     # move shaft n from 
     TIME += (dt1 + dt2)
     es[n]['pos'] = dest                                     # shaft has reached destination
 
-# process calls list a FIFO queue
+# process calls list as a FIFO queue
 while calls:
     call = calls.pop(0)
     if TIME <= call['t']:                                   # if next call has not occured yet
@@ -62,7 +61,7 @@ while calls:
     goto( dropoff, n, call['dest'] )                        # then dropoff
 
 # compute stats and write to stdout
-avg_wait_time = mean( array(dt1_log[pickup]) )
+avg_wait_time = mean( dt1_log[pickup] )
 avg_inside_time = mean( dt1_log[dropoff] )
 avg_total_delay = avg_wait_time + avg_inside_time
 print(STAT_MSG.format(avg_wait_time, avg_inside_time, avg_total_delay))
