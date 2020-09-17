@@ -1,17 +1,24 @@
 #!/usr/bin/env python3 -B
-from numpy import loadtxt, mean, array
-import sys, io, random, string
+from numpy import loadtxt, mean
+import sys, io, random, string, yaml
 
 try:
+    if '-h' in sys.argv:
+        raise
+    CONFIG_FILE = sys.argv[1]
+    with open(CONFIG_FILE) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
     CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
+    NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
+    CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
+    ACTION_MSG = config['templates']['ACTION']
+    STATS_MSG = config['templates']['STATS']
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
 
 data = loadtxt(fname=CALLS, dtype=('i'))                        # load data into 2D array: [(t, a, b), ...]
-calls = {t: (a,b) for t,a,b in data}                            # hash map => {t: (a, b)}
+calls = {t: (t,a,b) for t,a,b in data}                          # hash map => {t: (t,a, b)}
 
-NUM_SHAFTS = 3                                                  # number of elevators
-CAPACITY = 10                                                   # maximum capacity of each elevator
 elv = {
     'y': 1,                                                     # the position of the elevator
     'riders': {},                                               # hash map => {rider: True}
@@ -32,7 +39,11 @@ npickup = lambda y: len(waiting[y])                             # get: number of
 velocity = lambda idx: elv[idx]['v']                            # get: velocity of elevator
 delayed = lambda idx: elv[idx]['delay']                         # get: remaining time for which the elevator cannot move
 
-log = {'C': 0, 'P': 0, 'D': 0}                                  # store number of calls, pick-ups, and drop-offs
+# action: ["TIME {};\tSHAFT {}\t FLOOR {}\t{}", ...]
+# timestamp: {rider: {"CALL":t, "PICKUP":t,"DROPOFF":t}, ...}
+log = {
+    'C': 0, 'P': 0, 'D': 0, 'action': [], 'timestamp': {}
+}
 
 t = 0
 delay = 0
@@ -65,26 +76,31 @@ def rider():                                                    # generate uniqu
 def respond(call):
     log['C'] += 1
     r = rider()                                                 # unique rider for each call (r)
-    a, b = call                                             
+    t, a, b = call                                             
     waiting[a] = waiting.get(a, []) + [r]                       # (r) is waiting at (a)
     destination[r] = b                                          # (r) is going to (b)
+    log['timestamp'][r] = {'CALL': t}
 
 def pickup(idx, riders):
-    global delay
+    global t, delay
+    log['action'].append( ACTION_MSG.format(t+delay, idx+1, position(idx), 'PICKUP') )
     for r in riders:
         log['P'] += 1
         elv[idx]['riders'][r] = True                            # rider steps into elevator
         b = destination[r]                                      # rider is going to (b)
         arriving[b] = arriving.get(b, []) + [r]                 # at (b), dropoff (r)
+        log['timestamp'][r].update( {'PICKUP': t} )
     assert nriders(idx) <= CAPACITY
     dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to pick up riders
     delay += dt; elv[idx]['delay'] += dt
 
 def dropoff(idx, riders):
     global delay
+    log['action'].append( ACTION_MSG.format(t+delay, idx+1, position(idx), 'DROPOFF') )
     for r in riders:
         log['D'] += 1
-        elv[idx]['riders'].pop(r)                               # disembark riders by their unique identifer
+        elv[idx]['riders'].pop(r)                               # built-in test: disembark riders by their unique identifer
+        log['timestamp'][r].update( {'DROPOFF': t} )
     dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to drop off riders
     delay += dt; elv[idx]['delay'] += dt
     ignore[idx].clear()                                         # clear ignore table after every dropoff
@@ -108,4 +124,17 @@ while calls or waiting or arriving:
 
 assert all(nriders(idx) == 0 for idx in range(NUM_SHAFTS))
 assert len(data) == log['C'] == log['P'] == log['D']
-print('t:', t, 'delay:', delay)
+
+# compute stats and write to stdout
+wait_times, inside_times = [], [] 
+for times in log['timestamp'].values():
+    C, P, D = times['CALL'], times['PICKUP'], times['DROPOFF']
+    wait_times.append( P - C )
+    inside_times.append( D - P )
+WAIT, INSIDE = mean(wait_times), mean(inside_times)
+TOTAL = WAIT + INSIDE
+print(STATS_MSG.format(WAIT, INSIDE, TOTAL))
+
+# write action time series to stdout
+actions = "\n".join(msg for msg in log['action'])
+print(actions)
