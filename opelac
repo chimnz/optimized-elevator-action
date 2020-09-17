@@ -13,32 +13,45 @@ except:
 data = loadtxt(fname=CALLS, dtype=('i'))                    # load data into 2D array: [(t, a, b), ...]
 calls = {t: (a,b) for t,a,b in data}                        # hash map => {t: (a, b)}
 
+N = 2                                                       # number of elevators
+CAPACITY = 2                                                # maximum capacity of each elevator
 elv = {
     'y': 1,
     'riders': {},                                           # hash map => {rider: True}
-    'capacity': 2
+    ##'delay': 0,                                              # the amount of time by which elevator movement is delayed
+    'dy': 1
 }
+elv = {i: elv.copy() for i in range(N)}                     # N identical elevators
 
 pickup = {}                                                 # {a: [rider, ...]}
 dest = {}                                                   # {rider: b}
 dropoff = {}                                                # {b: [rider, ...]}
 
+position = lambda idx: elv[idx]['y']
+nriders = lambda idx: len(elv[idx]['riders'])               # get number of riders in elevator (idx)
+limit = lambda idx: CAPACITY - nriders(idx)                 # get number of additional people that can fit onto elevator
+npickup = lambda y: len(pickup[y])                          # get number of people to be picked up at y
+##delayed = lambda idx: elv[idx]['delay']              
+
 log = {'C': 0, 'P': 0, 'D': 0}                              # store number of calls, pick-ups, and drop-offs
 
 t = 0
 delay = 0
-dy = 1
 
-def move():                                                 # elevator is constantly moving from floor 1 to floor 100
-    global t, dy
-    dt = 1                                                  # move at 1 floor/second
-    if elv['y'] == 1:
-        dy = 1
-    elif elv['y'] == 100:
-        dy = -1
-    elv['y'] += dy; t += dt
+def advance():                                              # move elevators, advance time forward
+    global t
+    dt = 1
+    for idx in range(N):
+        dy = elv[idx]['dy']
+        if position(idx) == 1:
+            dy = 1                                          # move 1 floor/second
+        elif position(idx) == 100:
+            dy = -1                                         # move at -1 floor/second
+        elv[idx]['dy'] = dy
+        elv[idx]['y'] += dy
+    t += dt                                                 # time moves forward no matter what
 
-def rider():                                                # generate unique 25 character rider identifier
+def rider():                                                # generate unique rider identifier
     chars = string.ascii_lowercase + string.digits
     r = ''.join(random.choice(chars) for i in range(25))
     return r
@@ -50,42 +63,42 @@ def respond(call):
     pickup[a] = pickup.get(a, []) + [r]                     # at (a), pick up (r)
     dest[r] = b                                             # (r) is going to (b)
 
-def pick(riders):
+def pick(idx, riders):
     global delay
     for r in riders:
         log['P'] += 1
-        elv['riders'][r] = True                             # new rider steps into elevator
+        elv[idx]['riders'][r] = True                        # new rider steps into elevator
         b = dest[r]                                         # rider is going to (b)
         dropoff[b] = dropoff.get(b, []) + [r]               # at (b), dropoff (r)
-    dt = 30 if elv['y'] == 1 else 5                         # compensate for time it takes to pick up riders
-    delay += dt
+    dt = 30 if position(idx) == 1 else 5                    # compensate for time it takes to pick up riders
+    delay += dt;
+    ##elv[idx]['delay'] += dt
 
-
-def drop(riders):
+def drop(idx, riders):
     global delay
     for r in riders:
         log['D'] += 1
-        elv['riders'].pop(r)                                # disembark riders by their unique identifer
-    dt = 30 if elv['y'] == 1 else 5                         # compensate for time it takes to drop off riders
-    delay += dt
+        elv[idx]['riders'].pop(r)                               # disembark riders by their unique identifer
+    dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to drop off riders
+    delay += dt;
+    ##elv[idx]['delay'] += dt
 
 while calls or pickup or dropoff:
-    y = elv['y']
-    if calls.get(t):                                        # check if call was made at current time
+    if calls.get(t):                                            # check if call was made at current time)
         respond( calls.pop(t) )
-    if dropoff.get(y):                                      # (1) check if rider(s) needs to be dropped off at current position  
-        drop( dropoff.pop(y) )
-    if pickup.get(y):                                       # (2) check if rider(s) needs to be picked up at current position
-        nriders = len( elv['riders'] )                      # number of people on the elevator
-        npickup = len( pickup[y] )                          # number of people who need to be picked up
-        limit = elv['capacity'] - nriders
-        if npickup <= limit:                                # if there is enough space, pick-up all riders
-            pick( pickup.pop(y) )
-        else:                                               # if there is not enough space choose riders who will be picked up        
-            newriders = pickup[y][:limit]                   # riders that will be emabrking
-            pickup[y] = pickup[y][limit:]                   # update pickup table
-            pick( newriders )
-    move()
+    for idx in range(N):
+        y = position(idx)
+        if dropoff.get(y):                                      # (1) check if rider(s) needs to be dropped off at current position  
+            drop( idx, dropoff.pop(y) )
+        if pickup.get(y):                                       # (2) check if rider(s) needs to be picked up at current position
+            lmt = limit(idx)
+            if npickup(y) <= lmt:                               # if there is enough space
+                pick( idx, pickup.pop(y) )                      # pick-up all riders
+            else:                                               # if there is not enough space
+                pick( idx, pickup[y][:lmt] )                    # pick up only (lmt) people
+                pickup[y] = pickup[y][lmt:]                     # update pickup table
+    advance()
 
-assert len( elv['riders'] ) == 0
+assert all(nriders(idx) == 0 for idx in range(N))
 assert log['C'] == log['P'] == log['D']
+print('t:', t, 'delay:', delay)
