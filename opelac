@@ -1,12 +1,10 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean, array
-import sys, io, random
-from string import ascii_lowercase as chars
+import sys, io, random, string
 
 try:
-    if not sys.stdin.isatty():                                   # if stdin is not interactive (proper piping or input redirection occured)
+    if not sys.stdin.isatty():                              # if stdin is not interactive (proper piping or input redirection occured)
         CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
-        sys.stdin.flush(); sys.stdout.flush()
     else:
         raise Exception
 except:
@@ -16,66 +14,73 @@ data = loadtxt(fname=CALLS, dtype=('i'))                    # load data into 2D 
 calls = {t: (a,b) for t,a,b in data}                        # hash map => {t: (a, b)}
 
 elv = {
-    'y': 1,                                                 # init_pos
+    'y': 1,
     'riders': {},                                           # hash map => {rider: True}
-    'dest': 1,
-    'backlog': []                                           # 
+    'capacity': 2
 }
 
-picks = {}                                                  # {a: [rider, ...]}
+pickup = {}                                                 # {a: [rider, ...]}
 dest = {}                                                   # {rider: b}
-drops = {}                                                  # {b: [rider, ...]}
+dropoff = {}                                                # {b: [rider, ...]}
 
-distance = lambda y: abs( y - elv['y'] )
-rider = lambda: ''.join(random.choice(chars) for i in range(7))
+log = {'C': 0, 'P': 0, 'D': 0}                              # store number of calls, pick-ups, and drop-offs
 
 t = 0
-def move():                                                 # move toward destination at 1 floor/second
-    global t
-    stop, y = elv['dest'], elv['y']
-    dt = 1
-    if stop == y:
-        dy = 0
-    elif stop > y:
+delay = 0
+dy = 1
+
+def move():                                                 # elevator is constantly moving from floor 1 to floor 100
+    global t, dy
+    dt = 1                                                  # move at 1 floor/second
+    if elv['y'] == 1:
         dy = 1
-    elif stop < y:
+    elif elv['y'] == 100:
         dy = -1
     elv['y'] += dy; t += dt
 
+def rider():                                                # generate unique 25 character rider identifier
+    chars = string.ascii_lowercase + string.digits
+    r = ''.join(random.choice(chars) for i in range(25))
+    return r
+
 def respond(call):
+    log['C'] += 1
     r = rider()                                             # unique rider for each call (r)
-    ##print('(t: {}, person: {}) CALL'.format(t, r))
     a, b = call                                             
-    picks[a] = picks.get(a, []) + [r]                       # at (a), pickup (r)
+    pickup[a] = pickup.get(a, []) + [r]                     # at (a), pickup (r)
     dest[r] = b                                             # (r) is going to (b)
-    elv['dest'] = a                                         # set current destination to (a)
-    #NOTE: what if this is another call that came while elv already responding to a call? what should elv dest change to?
 
-delay = 0
-def pickup(pick):
-    for r in pick:
+def pick(riders):
+    for r in riders:
+        log['P'] += 1
         elv['riders'][r] = True                             # new rider steps into elevator
-        b = dest[r]
-        drops[b] = drops.get(b, []) + [r]                   # at (b), dropoff (r)
-    ##print('(t: {}) (person: {}) (y: {}) (r: {}) PICK'.format(t, pick, elv['y'], elv['riders']))
-    elv['dest'] = dest[r]                                   # start heading towards new destination (b)
-    #NOTE: what about if two riders make call within short enough period such that two are waiting to get picked up? where does elv go?
+        b = dest[r]                                         # rider is going to (b)
+        dropoff[b] = dropoff.get(b, []) + [r]               # at (b), dropoff (r)
 
-def dropoff(drop):
-    ##print('(t: {}) (person: {}) (y: {}) (r: {}) DROP'.format(t, drop, elv['y'], elv['riders']))
-    for r in drop:
-        elv['riders'].pop(r)                                # departing rider steps out of elevator
-    elv['dest'] = elv['y']                                  # elevator remains at current position until next call
-    #NOTE what if another call came in before this dropoff?
+def drop(riders):
+    for r in riders:
+        log['D'] += 1
+        elv['riders'].pop(r)                                # disembark riders by unique identifer
 
-C = P = D = 0
-while t <= 1100:
+#NOTE: must compensate for pick-up and drop-off time!
+while calls or pickup or dropoff:
     y = elv['y']
     if calls.get(t):                                        # check if call was made at current time
-        respond( calls.pop(t) ); C += 1
-    if picks.get(y):                                        # check if rider(s) needs to be picked up at current position
-        pickup( picks.pop(y) ); P += 1
-    if drops.get(y):                                        # check if rider(s) needs to be dropped off at current position  
-        dropoff( drops.pop(y) ); D += 1         
+        respond( calls.pop(t) )
+    if dropoff.get(y):                                      # (1) check if rider(s) needs to be dropped off at current position  
+        drop( dropoff.pop(y) )
+    if pickup.get(y):                                       # (2) check if rider(s) needs to be picked up at current position
+        nriders = len( elv['riders'] )                      # number of people on the elevator
+        npickup = len( pickup[y] )                          # number of people who need to be picked up
+        limit = elv['capacity'] - nriders
+        if npickup <= limit:                                # if there is enough space, pick-up all riders
+            pick( pickup.pop(y) )
+        else:                                               # if there is not enough space choose riders who will be picked up        
+            #NOTE: should choose new riders in order of earliest call (inside wait time)
+            newriders = pickup[y][:limit]                   # riders that will be emabrking
+            pickup[y] = pickup[y][limit:]                   # update pickup table
+            pick( newriders )
     move()
-print('C: {} P: {} D: {}'.format(C, P, D))
+
+assert len( elv['riders'] ) == 0
+assert log['C'] == log['P'] == log['D']
