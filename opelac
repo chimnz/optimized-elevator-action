@@ -5,66 +5,70 @@ import sys, yaml, io
 try:
     if '-h' in sys.argv:
         raise
-    CONFIG_FILE = sys.argv[1]
+    CONFIG_FILE = sys.argv[1]                                    # parse config file
     with open(CONFIG_FILE) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+    CALLS = io.StringIO('\n'.join(line for line in sys.stdin))   # read calls time series from stdin
     NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
     INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
     SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
     STAT_MSG = config['templates']['STATS']
     ACTION_MSG = config['templates']['sequential']['ACTION']
-    CALLS = io.StringIO('\n'.join(line for line in sys.stdin))
 except:
     exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
 
 TIME = 0                                                    # simulation time
+WAIT = INSIDE = TOTAL = 0                                   # time statistics to be logged
 
 pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
-action_log = []                                             # action message log
-dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
-elv = {}                                                    # init elevator system state
+log = {'action': [], 'wait': [], 'inside': []}
+
+elv = {}                                                    # initalize identical elevator (shaft) states
 for i in range(NUM_SHAFTS):
-    n = i+1                                                 # shaft number
-    shaft = { 'pos': INITIAL_POS }                  # shaft (dict)
-    elv[n] = shaft
+    n = i+1                                                 # shaft number (1, 2, 3, ...)
+    elv[n] = { 'pos': INITIAL_POS }
 
 # load data into 2D array
-calls = list( loadtxt(fname=CALLS, dtype=('i')) )
+calls = list( loadtxt(fname=CALLS, dtype=('i')) )           # [(t, a, b), ...]
 TIME = calls[0][0]                                          # set the time initial elapsed simulation time to time of first call
 # convert 2D array into 1D array of hash tables
-calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
+calls = [{'t':t, 'a':a, 'b':b} for t,a,b in calls]          # call at time (t), requesting to go from point (a) to point (b)
 
-def nearest_shaft(pos):
-    distance = lambda n: abs( pos - elv[n]['pos'] )
-    shafts = sorted( elv.keys(), key=distance )            # all shafts sorted by distance releative to pos
+def nearest_shaft(floor):
+    distance = lambda n: abs( floor - elv[n]['pos'] )       # given shaft number (n), return distance of shaft (n) from (pos)
+    shafts = sorted( elv.keys(), key=distance )             # all shafts sorted by distance releative to pos
     return shafts[0]
 
 def goto(act, n, dest):                                     # move shaft n from its current pos to dest
     global TIME
-    pos = elv[n]['pos']
-    msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log message for the action
-    action_log.append( msg )
+    pos = elv[n]['pos']                                     # current position of the shaft
+    msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log: action
+    log['action'].append( msg )
 
-    dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: traveling
-    dt1_log[act].append(dt1)
-    dt2 = 30 if dest == 1 else 5                            # delay #2: loading/unloading
+    dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: shaft is moving
+    dt2 = 30 if dest == 1 else 5                            # delay #2: shaft is loading/unloading
     TIME += (dt1 + dt2)
-    elv[n]['pos'] = dest                                     # shaft has reached destination
+    elv[n]['pos'] = dest                                    # shaft has reached destination
+
+    if act is pickup:                                       # log: wait_time
+        log['wait'].append(dt1)
+    elif act is dropoff:                                    # log: inside_time
+        log['inside'].append(dt1)
 
 # process calls list as a FIFO queue
 while calls:
     call = calls.pop(0)
     if TIME <= call['t']:                                   # if next call has not occured yet
         TIME = call['t']                                    # wait until next call before performing actions
-    n = nearest_shaft( call['pos'] )                        # choose the nearest shaft
-    goto( pickup, n, call['pos'] )                          # perform pickup
-    goto( dropoff, n, call['dest'] )                        # then dropoff
+    n = nearest_shaft( call['a'] )                          # choose the nearest shaft
+    goto( pickup, n, call['a'] )                            # perform pickup
+    goto( dropoff, n, call['b'] )                           # then dropoff
 
 # compute stats and write to stdout
-avg_wait_time = mean( dt1_log[pickup] )
-avg_inside_time = mean( dt1_log[dropoff] )
-avg_total_delay = avg_wait_time + avg_inside_time
-print(STAT_MSG.format(avg_wait_time, avg_inside_time, avg_total_delay))
+WAIT = mean( log['wait'] )
+INSIDE = mean( log['inside'] )
+TOTAL = WAIT + INSIDE
+print(STAT_MSG.format(WAIT, INSIDE, TOTAL))
 # write action time series to stdout
-actions = "\n".join(msg for msg in action_log)
+actions = "\n".join(msg for msg in log['action'])
 print(actions)
