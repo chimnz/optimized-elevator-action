@@ -11,8 +11,8 @@ try:
     NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
     INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
     SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
-    ACTION_MSG = config['templates']['ACTION']
     STAT_MSG = config['templates']['STATS']
+    ACTION_MSG = config['templates']['sequential']['ACTION']
     CALLS = io.StringIO('\n'.join(line for line in sys.stdin))
 except:
     exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
