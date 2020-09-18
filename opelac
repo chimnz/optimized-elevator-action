@@ -66,11 +66,12 @@ while calls:
     goto( pickup, n, call['a'] )                            # perform pickup
     goto( dropoff, n, call['b'] )                           # then dropoff
 
+# write action time series to stdout
+actions = "\n".join(msg for msg in log['action'])
+print("[actions]\n{}\n".format(actions))
 # compute stats and write to stdout
 WAIT = mean( log['wait'] )
 INSIDE = mean( log['inside'] )
 TOTAL = WAIT + INSIDE
-print(STAT_MSG.format(WAIT, INSIDE, TOTAL))
-# write action time series to stdout
-actions = "\n".join(msg for msg in log['action'])
-print(actions)
+stats = STAT_MSG.format(WAIT, INSIDE, TOTAL)
+print("[stats]\n{}".format(stats))
