@@ -4,8 +4,8 @@ SPEED: 1
 CAPACITY: 10
 
 templates:
-  STATS: "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_DELAY = {:.2f}"
+  STATS: "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_TIME = {:.2f}"
   sequential:
-    ACTION: "TIME {};\tSHAFT {} FLOOR {} -> {}\t{}"
+    ACTION: "TIME {};\tSHAFT {}\t FLOOR {} -> {}\t{}"
   oscillating:
     ACTION: "TIME {};\tSHAFT {}\t FLOOR {}\t{}"
