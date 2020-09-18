@@ -11,8 +11,8 @@ try:
     CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
     NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
     CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
-    ACTION_MSG = config['templates']['ACTION']
     STATS_MSG = config['templates']['STATS']
+    ACTION_MSG = config['templates']['oscillating']['ACTION']
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
 

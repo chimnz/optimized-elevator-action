@@ -1,7 +1,11 @@
 NUM_SHAFTS: 3
 INITIAL_POS: 1
 SPEED: 1
+CAPACITY: 10
 
 templates:
-  ACTION: "TIME {};\tSHAFT {} FLOOR {} -> {}\t{}"
   STATS: "AVG_WAIT_TIME = {:.2f}\nAVG_INSIDE_TIME = {:.2f}\nAVG_TOTAL_DELAY = {:.2f}"
+  sequential:
+    ACTION: "TIME {};\tSHAFT {} FLOOR {} -> {}\t{}"
+  oscillating:
+    ACTION: "TIME {};\tSHAFT {}\t FLOOR {}\t{}"
