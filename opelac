@@ -1,14 +1,16 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean, array
-import sys, yaml, io
+from yaml import load, FullLoader
+from sys import argv
+from io import StringIO
 
 try:
-    if '-h' in sys.argv:
+    if '-h' in argv:
         raise
-    CONFIG_FILE = sys.argv[1]                                    # parse config file
+    CONFIG_FILE = argv[1]                                    # parse config file
     with open(CONFIG_FILE) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-    CALLS = io.StringIO('\n'.join(line for line in sys.stdin))   # read calls time series from stdin
+        config = load(f, Loader=FullLoader)
+    CALLS = StringIO('\n'.join(line for line in sys.stdin))   # read calls time series from stdin
     NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
     INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
     SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
