@@ -1,7 +1,7 @@
 #!/usr/bin/env python3 -B
-from numpy import loadtxt, mean, array
+from numpy import loadtxt, mean
 from yaml import load, FullLoader
-from sys import argv
+from sys import argv, stdin
 from io import StringIO
 
 try:
@@ -10,7 +10,7 @@ try:
     CONFIG_FILE = argv[1]                                    # parse config file
     with open(CONFIG_FILE) as f:
         config = load(f, Loader=FullLoader)
-    CALLS = StringIO('\n'.join(line for line in sys.stdin))   # read calls time series from stdin
+    CALLS = StringIO('\n'.join(line for line in stdin))   # read calls time series from stdin
     NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
     INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
     SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
