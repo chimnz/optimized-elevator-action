@@ -22,11 +22,11 @@ TIME = 0                                                    # simulation time
 pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
 action_log = []                                             # action message log
 dt1_log = { pickup: [], dropoff: [] }                       # dt1 is "wait time" for pickup and "inside time" for dropoff
-es = {}                                                     # init elevator system state
+elv = {}                                                    # init elevator system state
 for i in range(NUM_SHAFTS):
     n = i+1                                                 # shaft number
-    shaft = { 'n': n, 'pos': INITIAL_POS }                  # shaft (dict)
-    es[n] = shaft
+    shaft = { 'pos': INITIAL_POS }                  # shaft (dict)
+    elv[n] = shaft
 
 # load data into 2D array
 calls = list( loadtxt(fname=CALLS, dtype=('i')) )
@@ -35,13 +35,13 @@ TIME = calls[0][0]                                          # set the time initi
 calls = [{'t': t, 'pos': pos, 'dest': dest} for t, pos, dest in calls]
 
 def nearest_shaft(pos):
-    distance = lambda shaft: abs( pos - shaft['pos'] )
-    shafts = sorted( es.values(), key=distance )            # all shafts sorted by distance releative to pos
-    return shafts[0]['n']
+    distance = lambda n: abs( pos - elv[n]['pos'] )
+    shafts = sorted( elv.keys(), key=distance )            # all shafts sorted by distance releative to pos
+    return shafts[0]
 
 def goto(act, n, dest):                                     # move shaft n from its current pos to dest
     global TIME
-    pos = es[n]['pos']
+    pos = elv[n]['pos']
     msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log message for the action
     action_log.append( msg )
 
@@ -49,7 +49,7 @@ def goto(act, n, dest):                                     # move shaft n from 
     dt1_log[act].append(dt1)
     dt2 = 30 if dest == 1 else 5                            # delay #2: loading/unloading
     TIME += (dt1 + dt2)
-    es[n]['pos'] = dest                                     # shaft has reached destination
+    elv[n]['pos'] = dest                                     # shaft has reached destination
 
 # process calls list as a FIFO queue
 while calls:
