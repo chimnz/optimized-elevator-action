@@ -4,11 +4,14 @@ from yaml import load, FullLoader
 from sys import argv, stdin
 from io import StringIO
 
-if '-h' in argv:
+try:
+    if '-h' in argv:
+        raise
+    CONFIG_FILE = argv[1]                                        # parse config file
+    with open(CONFIG_FILE) as f:
+        config = load(f, Loader=FullLoader)
+except:
     exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
-CONFIG_FILE = argv[1]                                        # parse config file
-with open(CONFIG_FILE) as f:
-    config = load(f, Loader=FullLoader)
 CALLS = StringIO('\n'.join(line for line in stdin))          # read calls time series from stdin
 NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
 INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
