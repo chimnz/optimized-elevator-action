@@ -16,6 +16,8 @@ try:
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
 
+WAIT = INSIDE = TOTAL = 0                                       # time statistics to be computed
+
 data = loadtxt(fname=CALLS, dtype=('i'))                        # load data into 2D array: [(t, a, b), ...]
 calls = {t: (t,a,b) for t,a,b in data}                          # hash map => {t: (t,a, b)}
 
@@ -42,7 +44,7 @@ delayed = lambda idx: elv[idx]['delay']                         # get: remaining
 # action: ["TIME {};\tSHAFT {}\t FLOOR {}\t{}", ...]
 # timestamp: {rider: {"CALL":t, "PICKUP":t,"DROPOFF":t}, ...}
 log = {
-    'C': 0, 'P': 0, 'D': 0, 'action': [], 'timestamp': {}
+    'C': 0, 'P': 0, 'D': 0, 'action': [], 'wait': [], 'inside': [], 'timestamp': {}
 }
 
 t = 0
@@ -125,6 +127,9 @@ while calls or waiting or arriving:
 assert all(nriders(idx) == 0 for idx in range(NUM_SHAFTS))
 assert len(data) == log['C'] == log['P'] == log['D']
 
+# write action time series to stdout
+actions = "\n".join(msg for msg in log['action'])
+print("[actions]\n{}\n".format(actions))
 # compute stats and write to stdout
 wait_times, inside_times = [], [] 
 for times in log['timestamp'].values():
@@ -133,8 +138,5 @@ for times in log['timestamp'].values():
     inside_times.append( D - P )
 WAIT, INSIDE = mean(wait_times), mean(inside_times)
 TOTAL = WAIT + INSIDE
-print(STATS_MSG.format(WAIT, INSIDE, TOTAL))
-
-# write action time series to stdout
-actions = "\n".join(msg for msg in log['action'])
-print(actions)
+stats = STATS_MSG.format(WAIT, INSIDE, TOTAL)
+print("[stats]\n{}".format(stats))
