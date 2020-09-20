@@ -32,7 +32,6 @@ for i in range(NUM_SHAFTS):
 
 # load data into 2D array
 calls = list( loadtxt(fname=CALLS, dtype=('i')) )           # [(t, a, b), ...]
-TIME = calls[0][0]                                          # set the time initial elapsed simulation time to time of first call
 # convert 2D array into 1D array of hash tables
 calls = [{'t':t, 'a':a, 'b':b} for t,a,b in calls]          # call at time (t), requesting to go from point (a) to point (b)
 
