@@ -20,6 +20,7 @@ STAT_MSG = config['templates']['STATS']
 ACTION_MSG = config['templates']['sequential']['ACTION']
 
 TIME = 0                                                    # simulation time
+CALL_TIME = 0                                               # time of earliest unanswered call
 WAIT = INSIDE = TOTAL = 0                                   # time statistics to be logged
 
 pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
@@ -31,9 +32,7 @@ for i in range(NUM_SHAFTS):
     elv[n] = { 'pos': INITIAL_POS }
 
 # load data into 2D array
-calls = list( loadtxt(fname=CALLS, dtype=('i')) )           # [(t, a, b), ...]
-# convert 2D array into 1D array of hash tables
-calls = [{'t':t, 'a':a, 'b':b} for t,a,b in calls]          # call at time (t), requesting to go from point (a) to point (b)
+calls = list( loadtxt(fname=CALLS, dtype=('i')) )           # [(t, a, b), ...]: at time (t), I want to go from (a) to (b)
 
 def nearest_shaft(floor):
     distance = lambda n: abs( floor - elv[n]['pos'] )       # given shaft number (n), return distance of shaft (n) from (pos)
@@ -52,18 +51,26 @@ def goto(act, n, dest):                                     # move shaft n from 
     elv[n]['pos'] = dest                                    # shaft has reached destination
 
     if act is pickup:                                       # log: wait_time
-        log['wait'].append(dt1)
+        begin_time = TIME - CALL_TIME
+        wait_time = begin_time + dt1
+        log['wait'].append(wait_time)
     elif act is dropoff:                                    # log: inside_time
+        inside_time = dt1
         log['inside'].append(dt1)
+
+def answer(call):
+    global TIME, CALL_TIME
+    t, a, b = call
+    CALL_TIME = t                                           # time at which call was made
+    if TIME <= t:                                           # if next call has not occured yet
+        TIME = t                                            # wait until next call before performing actions
+    n = nearest_shaft( a )                                  # choose the nearest shaft to (a)
+    goto( pickup, n, a )                                    # perform pickup
+    goto( dropoff, n, b )                                   # then dropoff
 
 # process calls list as a FIFO queue
 while calls:
-    call = calls.pop(0)
-    if TIME <= call['t']:                                   # if next call has not occured yet
-        TIME = call['t']                                    # wait until next call before performing actions
-    n = nearest_shaft( call['a'] )                          # choose the nearest shaft
-    goto( pickup, n, call['a'] )                            # perform pickup
-    goto( dropoff, n, call['b'] )                           # then dropoff
+    answer( calls.pop(0) )
 
 # write action time series to stdout
 actions = "\n".join(msg for msg in log['action'])
