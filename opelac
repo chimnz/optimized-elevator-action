@@ -56,16 +56,17 @@ def advance():                                                  # move time forw
     for idx in range(NUM_SHAFTS):
         pos = position(idx)
         v = velocity(idx)
-        if delayed(idx):                                        # is performing pickup/dropoff
+        if delayed(idx):                                        # performing pickup/dropoff
             v = 0
             elv[idx]['delay'] -= dt
-        elif velocity(idx):                                     # is moving
+        else:                                                   # not performing pickup/dropoff
             if pos == 1:
                 v = 1                                           # change velocity to 1 floor/second
             elif pos == 100:                              
                 v = -1                                          # change velocity to -1 floor/second
-        else:                                                   # is stationairy
-            v = 1
+            else:                                               # position in range (1, 100)
+                if v == 0:
+                    v = 1
         elv[idx]['v'] = v                                       # set velocity
         elv[idx]['y'] += v                                      # move elevator
     t += dt                                                     # time moves forward no matter what
