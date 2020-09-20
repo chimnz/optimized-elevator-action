@@ -56,7 +56,7 @@ def goto(act, n, dest):                                     # move shaft n from 
         log['wait'].append(wait_time)
     elif act is dropoff:                                    # log: inside_time
         inside_time = dt1                                   # time passenger spent inside elevator moving from (a) to (b)
-        log['inside'].append(dt1)
+        log['inside'].append(inside_time)
 
 def answer(call):
     global TIME, CALL_TIME
