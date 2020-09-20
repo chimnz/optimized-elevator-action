@@ -51,10 +51,11 @@ def goto(act, n, dest):                                     # move shaft n from 
     elv[n]['pos'] = dest                                    # shaft has reached destination
 
     if act is pickup:                                       # log: wait_time
-        wait_time = (TIME - CALL_TIME) + dt1
+        begin_time = TIME - CALL_TIME                       # elapsed time between call and elevator starting to move toward (a)
+        wait_time = begin_time + dt1                        # time passenger spent waiting for elevator to arrive after making call
         log['wait'].append(wait_time)
     elif act is dropoff:                                    # log: inside_time
-        inside_time = dt1
+        inside_time = dt1                                   # time passenger spent inside elevator moving from (a) to (b)
         log['inside'].append(dt1)
 
 def answer(call):
