@@ -1,14 +1,18 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean
-import sys, io, random, string, yaml
+from numpy.random import choice
+from sys import argv, stdin
+from io import StringIO
+from yaml import load, FullLoader
+from string import ascii_letters, digits
 
 try:
-    CONFIG_FILE = sys.argv[1]
+    CONFIG_FILE = argv[1]
     with open(CONFIG_FILE) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+        config = load(f, Loader=FullLoader)
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
-CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
+CALLS = StringIO('\n'.join(line.strip() for line in stdin))
 NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
 CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
 STATS_MSG = config['templates']['STATS']
@@ -67,9 +71,9 @@ def advance():                                                  # move time forw
     t += dt                                                     # time moves forward no matter what
 
 def rider():                                                    # generate unique rider identifier
-    chars = string.ascii_lowercase + string.digits
-    r = ''.join(random.choice(chars) for i in range(25))
-    return r
+    chars = list(ascii_letters + digits)
+    unique_rider = ''.join(choice(chars) for i in range(10))
+    return unique_rider
 
 def respond(call):
     log['C'] += 1
