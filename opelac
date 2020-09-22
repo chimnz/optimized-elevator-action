@@ -3,18 +3,16 @@ from numpy import loadtxt, mean
 import sys, io, random, string, yaml
 
 try:
-    if '-h' in sys.argv:
-        raise
     CONFIG_FILE = sys.argv[1]
     with open(CONFIG_FILE) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-    CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
-    NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
-    CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
-    STATS_MSG = config['templates']['STATS']
-    ACTION_MSG = config['templates']['oscillating']['ACTION']
 except:
     exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
+CALLS = io.StringIO('\n'.join(line.strip() for line in sys.stdin))
+NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
+CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
+STATS_MSG = config['templates']['STATS']
+ACTION_MSG = config['templates']['oscillating']['ACTION']
 
 WAIT = INSIDE = TOTAL = 0                                       # time statistics to be computed
 
@@ -46,7 +44,6 @@ delayed = lambda idx: elv[idx]['delay']                         # get: remaining
 log = { 'C': 0, 'P': 0, 'D': 0, 'action': [], 'timestamp': {} }
 
 t = 0
-delay = 0
 
 def advance():                                                  # move time forward; set next velocity
     global t
