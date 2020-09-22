@@ -1,83 +1,142 @@
 #!/usr/bin/env python3 -B
 from numpy import loadtxt, mean
-from yaml import load, FullLoader
+from numpy.random import choice
 from sys import argv, stdin
 from io import StringIO
+from yaml import load, FullLoader
+from string import ascii_letters, digits
 
 try:
-    if '-h' in argv:
-        raise
-    CONFIG_FILE = argv[1]                                        # parse config file
+    CONFIG_FILE = argv[1]
     with open(CONFIG_FILE) as f:
         config = load(f, Loader=FullLoader)
 except:
-    exit('usage: [CALLS] | opelac [CONFIG_FILE]\nor: opelac [CONFIG_FILE] < [CALLS_FILE]')
-CALLS = StringIO('\n'.join(line for line in stdin))          # read calls time series from stdin
-NUM_SHAFTS = int(config['NUM_SHAFTS'])                       # specify number of shafts
-INITIAL_POS = int(config['INITIAL_POS'])				     # initial position of all shafts
-SPEED = int(config['SPEED'])                                 # shaft speed (floor/second)
-STAT_MSG = config['templates']['STATS']
-ACTION_MSG = config['templates']['sequential']['ACTION']
+    exit('usage: [CALLS] | opelac\nor: opelac < [CALLS_FILE]')
+CALLS = StringIO('\n'.join(line.strip() for line in stdin))
+NUM_SHAFTS = config['NUM_SHAFTS']                           # number of elevators
+CAPACITY = config['CAPACITY']                               # maximum capacity of each elevator
+STATS_MSG = config['templates']['STATS']
+ACTION_MSG = config['templates']['oscillating']['ACTION']
 
-TIME = 0                                                    # simulation time
-CALL_TIME = 0                                               # time of earliest unanswered call
-WAIT = INSIDE = TOTAL = 0                                   # time statistics to be logged
+WAIT = INSIDE = TOTAL = 0                                       # time statistics to be computed
 
-pickup, dropoff = 'PICKUP', 'DROPOFF'                       # the two types of "goto" actions
-log = {'action': [], 'wait': [], 'inside': []}
+data = loadtxt(fname=CALLS, dtype=('i'))                        # load data into 2D array: [(t, a, b), ...]
+calls = {t: (t,a,b) for t,a,b in data}                          # hash map => {t: (t,a, b)}
 
-elv = {}                                                    # initalize identical elevator (shaft) states
-for i in range(NUM_SHAFTS):
-    n = i+1                                                 # shaft number (1, 2, 3, ...)
-    elv[n] = { 'pos': INITIAL_POS }
+elv = {
+    'y': 1,                                                     # the position of the elevator
+    'riders': {},                                               # hash map => {rider: True}
+    'delay': 0,                                                 # the amount of time by which elevator movement should be delayed
+    'v': 0                                                      # the velocity (speed and direction) of the elevator
+}
+elv = {idx: elv.copy() for idx in range(NUM_SHAFTS)}            # (NUM_SHAFTS) identical elevators
 
-# load data into 2D array
-calls = list( loadtxt(fname=CALLS, dtype=('i')) )           # [(t, a, b), ...]: at time (t), I want to go from (a) to (b)
+waiting = {}                                                    # {a: [rider, ...]}
+destination = {}                                                # {rider: b}
+arriving = {}                                                   # {b: [rider, ...]}
+ignore = {idx: {} for idx in range(NUM_SHAFTS)}                 # {idx: {y: True, ...}, ...}
 
-def nearest_shaft(floor):
-    distance = lambda n: abs( floor - elv[n]['pos'] )       # given shaft number (n), return distance of shaft (n) from (pos)
-    shafts = sorted( elv.keys(), key=distance )             # all shafts sorted by distance releative to pos
-    return shafts[0]
+position = lambda idx: elv[idx]['y']                            # get: position of elevator
+nriders = lambda idx: len(elv[idx]['riders'])                   # get: number of riders inside elevator
+limit = lambda idx: CAPACITY - nriders(idx)                     # get: number of additional riders that can fit inside elevator
+npickup = lambda y: len(waiting[y])                             # get: number of people to be riders up at y
+velocity = lambda idx: elv[idx]['v']                            # get: velocity of elevator
+delayed = lambda idx: elv[idx]['delay']                         # get: remaining time for which the elevator cannot move
 
-def goto(act, n, dest):                                     # move shaft n from its current pos to dest
-    global TIME
-    pos = elv[n]['pos']                                     # current position of the shaft
-    msg = ACTION_MSG.format(TIME, n, pos, dest, act)        # log: action
-    log['action'].append( msg )
+# action: ["TIME {};\tSHAFT {}\t FLOOR {}\t{}", ...]
+# timestamp: {rider: {"CALL":t, "PICKUP":t,"DROPOFF":t}, ...}
+log = { 'C': 0, 'P': 0, 'D': 0, 'action': [], 'timestamp': {} }
 
-    dt1 = int( abs(dest-pos) / SPEED )                      # delay #1: shaft is moving
-    dt2 = 30 if dest == 1 else 5                            # delay #2: shaft is loading/unloading
-    TIME += (dt1 + dt2)
-    elv[n]['pos'] = dest                                    # shaft has reached destination
+t = 0
 
-    if act is pickup:                                       # log: wait_time
-        begin_time = TIME - CALL_TIME                       # elapsed time between call and elevator starting to move toward (a)
-        wait_time = begin_time + dt1                        # time passenger spent waiting for elevator to arrive after making call
-        log['wait'].append(wait_time)
-    elif act is dropoff:                                    # log: inside_time
-        inside_time = dt1                                   # time passenger spent inside elevator moving from (a) to (b)
-        log['inside'].append(inside_time)
+def advance():                                                  # move time forward; set next velocity
+    global t
+    dt = 1
+    for idx in range(NUM_SHAFTS):
+        pos = position(idx)
+        v = velocity(idx)
+        if delayed(idx):                                        # performing pickup/dropoff
+            v = 0
+            elv[idx]['delay'] -= dt
+        else:                                                   # not performing pickup/dropoff
+            if pos == 1:
+                v = 1                                           # change velocity to 1 floor/second
+            elif pos == 100:                              
+                v = -1                                          # change velocity to -1 floor/second
+            else:                                               # position in range (1, 100)
+                if v == 0:
+                    v = 1
+        elv[idx]['v'] = v                                       # set velocity
+        elv[idx]['y'] += v                                      # move elevator
+    t += dt                                                     # time moves forward no matter what
 
-def answer(call):
-    global TIME, CALL_TIME
-    t, a, b = call
-    CALL_TIME = t                                           # time at which call was made
-    if TIME <= t:                                           # if next call has not occured yet
-        TIME = t                                            # wait until next call before performing actions
-    n = nearest_shaft( a )                                  # choose the nearest shaft to (a)
-    goto( pickup, n, a )                                    # perform pickup
-    goto( dropoff, n, b )                                   # then dropoff
+def rider():                                                    # generate unique rider identifier
+    chars = list(ascii_letters + digits)
+    unique_rider = ''.join(choice(chars) for i in range(10))
+    return unique_rider
 
-# process calls list as a FIFO queue
-while calls:
-    answer( calls.pop(0) )
+def respond(call):
+    log['C'] += 1
+    r = rider()                                                 # unique rider for each call (r)
+    t, a, b = call                                             
+    waiting[a] = waiting.get(a, []) + [r]                       # (r) is waiting at (a)
+    destination[r] = b                                          # (r) is going to (b)
+    log['timestamp'][r] = {'CALL': t}
+
+def pickup(idx, riders):
+    global t
+    log['action'].append( ACTION_MSG.format(t, idx+1, position(idx), 'PICKUP') )
+    for r in riders:
+        log['P'] += 1
+        elv[idx]['riders'][r] = True                            # rider steps into elevator
+        b = destination[r]                                      # rider is going to (b)
+        arriving[b] = arriving.get(b, []) + [r]                 # at (b), dropoff (r)
+        log['timestamp'][r]['PICKUP'] = t
+    assert nriders(idx) <= CAPACITY
+    dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to pick up riders
+    elv[idx]['delay'] += dt
+
+def dropoff(idx, riders):
+    global t
+    log['action'].append( ACTION_MSG.format(t, idx+1, position(idx), 'DROPOFF') )
+    for r in riders:
+        log['D'] += 1
+        elv[idx]['riders'].pop(r)                               # built-in test: disembark riders by their unique identifer
+        log['timestamp'][r]['DROPOFF'] = t
+    dt = 30 if position(idx) == 1 else 5                        # compensate for time it takes to drop off riders
+    elv[idx]['delay'] += dt
+    ignore[idx].clear()                                         # clear ignore table after every dropoff
+
+while calls or waiting or arriving:
+    if calls.get(t):                                            # check if call was made at current time)
+        respond( calls.pop(t) )
+    for idx in range(NUM_SHAFTS):
+        y = position(idx)
+        if arriving.get(y):                                     # (1) check if rider(s) needs to be dropped off at current position  
+            dropoff( idx, arriving.pop(y) )
+        if waiting.get(y) and not ignore[idx].get(y):           # (2) check if rider(s) needs to be picked up at current position
+            lmt = limit(idx)
+            if npickup(y) <= lmt:                               # if there is enough space
+                pickup( idx, waiting.pop(y) )                   # pick-up all riders
+            else:                                               # if there is not enough space
+                pickup( idx, waiting[y][:lmt] )                 # pick up only (lmt) people
+                waiting[y] = waiting[y][lmt:]                   # update waiting table
+                ignore[idx][y] = True                           # ignore this floor until next dropoff
+    advance()
+
+assert all(nriders(idx) == 0 for idx in range(NUM_SHAFTS))
+assert len(data) == log['C'] == log['P'] == log['D']
 
 # write action time series to stdout
 actions = "\n".join(msg for msg in log['action'])
 print("[actions]\n{}\n".format(actions))
 # compute stats and write to stdout
-WAIT = mean( log['wait'] )
-INSIDE = mean( log['inside'] )
+wait_times, inside_times = [], [] 
+for rider in log['timestamp'].values():                         # times is distinct for each unique rider
+    C, P, D = rider['CALL'], rider['PICKUP'], rider['DROPOFF']
+    wait_times.append( P - C )
+    inside_times.append( D - P )
+WAIT, INSIDE = mean(wait_times), mean(inside_times)
 TOTAL = WAIT + INSIDE
-stats = STAT_MSG.format(WAIT, INSIDE, TOTAL)
+stats = STATS_MSG.format(WAIT, INSIDE, TOTAL)
 print("[stats]\n{}".format(stats))
